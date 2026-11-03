@@ -1,0 +1,89 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>BridgeHarness</RootNamespace>
+    <AssemblyName>BridgeHarness</AssemblyName>
+
+    <!-- PluginFonts.cs 会只读宿主注册表（Microsoft.Win32.Registry），这是 Windows 专有 API。
+         插件本体是 net10.0-windows，编译器知道是 Windows、不会告警；本验证工程刻意保持
+         net10.0（跨平台，便于在任意环境跑纯逻辑断言），于是 CA1416 会提示「仅 Windows 受支持」。
+         这是预期内的：本工程只在 Windows 上运行。关掉这一条，保持「0 警告」的收口标准。 -->
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+
+  </PropertyGroup>
+
+  <!--
+    验证工程：直接编译插件的「无宿主依赖」源码（白名单 / 消息解析与净化 / 日志 / HTTP 服务 / 布局计算 /
+    自动更新的版本解析与对比 / Markdown 转义 / 教程导出），用一个假的 47300 端点做端到端验证。
+    不需要启动 NPS 本体。
+    SkiaSharp 只为拿到 SKRect（纯托管结构体），不会触发任何原生绘制。
+    注意：PluginUpdate.cs 刻意不依赖 WinForms（剪贴板写入留在插件侧），因此本工程保持 net10.0 即可编译。
+    TutorialHtmlExporter.cs 也不依赖 WinForms（落盘 + Process.Start 都是 BCL）；
+    它用到 PluginUpdate 仅限其中与平台无关的纯逻辑部分。
+  -->
+  <ItemGroup>
+    <Compile Include="..\..\src\IpWhitelist.cs" />
+    <Compile Include="..\..\src\InputRules.cs" />
+    <Compile Include="..\..\src\PushActivity.cs" />
+    <Compile Include="..\..\src\BridgeLog.cs" />
+    <Compile Include="..\..\src\HttpBridgeServer.cs" />
+    <Compile Include="..\..\src\LightState.cs" />
+    <Compile Include="..\..\src\UpdateNotice.cs" />
+    <Compile Include="..\..\src\SilentUpgrade.cs" />
+    <Compile Include="..\..\src\SilentUpgrader.cs" />
+    <Compile Include="..\..\src\ConfigLayout.cs" />
+    <Compile Include="..\..\src\ConfigPanelDefaults.cs" />
+    <!--
+      ConfigPanel.cs 也进验证工程（2026-09-23 起）：
+      它只依赖 SkiaSharp（原生绘制在本工程可用），对宿主 API 的唯一引用
+      （PanelTheme.FromRender(RenderTheme)，且是死代码）已删除，于是面板可以
+      用假宿主实例化 → 真的 Draw / 真的投递鼠标键盘 → 断言「输入 → 保存」的结果。
+      这是「保证输入内容能够正确保存与生效」最有力的一层证据（见 PanelSmokeTests）。
+    -->
+    <Compile Include="..\..\src\ConfigPanel.cs" />
+    <Compile Include="..\..\src\WinUiControls.cs" />
+    <Compile Include="..\..\src\CollapseDuration.cs" />
+    <Compile Include="..\..\src\PhoneAddress.cs" />
+    <Compile Include="..\..\src\TextEdit.cs" />
+    <Compile Include="..\..\src\WindowState.cs" />
+    <Compile Include="..\..\src\NativeKeys.cs" />
+    <Compile Include="..\..\src\TextLayout.cs" />
+    <Compile Include="..\..\src\PluginFonts.cs" />
+    <Compile Include="..\..\src\PluginUpdate.cs" />
+    <Compile Include="..\..\src\IconCatalog.cs" />
+    <Compile Include="..\..\src\AppBlacklist.cs" />
+    <Compile Include="..\..\src\VerificationCode.cs" />
+    <Compile Include="..\..\src\ResidueCleaner.cs" />
+    <Compile Include="..\..\src\IconClipboard.cs" />
+    <Compile Include="..\..\src\HostImageSeeder.cs" />
+  </ItemGroup>
+
+  <!--
+    与插件同样的内嵌图标资源，且 LogicalName **必须完全一致** ——
+    HostImageSeeder 是按「NpsPushBridge.assets.image.<文件名>」这个固定前缀去
+    typeof(HostImageSeeder).Assembly 里取资源的；在本工程里那个 Assembly 是 BridgeHarness，
+    所以这里也要用同一个 LogicalName 嵌进来，否则 EmbeddedCount 会是 0、
+    「资源确实打进去了」这条最关键的断言就无从验证。
+
+    ⚠️ 用的是显式清单而非通配符：与上面的 <Compile> 一个风格，也让「少嵌了一张图」
+      这种事故在审查 csproj 时肉眼可见（通配符会静默跟着目录变化）。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\image\qq-icon.png"        LogicalName="NpsPushBridge.assets.image.qq-icon.png" />
+    <EmbeddedResource Include="..\..\assets\image\wintoast-icon.png"  LogicalName="NpsPushBridge.assets.image.wintoast-icon.png" />
+    <EmbeddedResource Include="..\..\assets\image\bilibili-logo.png"  LogicalName="NpsPushBridge.assets.image.bilibili-logo.png" />
+    <EmbeddedResource Include="..\..\assets\image\chrome-logo.png"    LogicalName="NpsPushBridge.assets.image.chrome-logo.png" />
+    <EmbeddedResource Include="..\..\assets\image\edge-logo.png"      LogicalName="NpsPushBridge.assets.image.edge-logo.png" />
+    <EmbeddedResource Include="..\..\assets\image\potplayer-logo.jpg" LogicalName="NpsPushBridge.assets.image.potplayer-logo.jpg" />
+  </ItemGroup>
+
+
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+  </ItemGroup>
+
+</Project>

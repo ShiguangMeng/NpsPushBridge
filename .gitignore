@@ -1,0 +1,17 @@
+# 构建产物
+bin/
+obj/
+dist/
+
+# 本地自包含 SDK 与工作数据
+.tools/
+.workbuddy/
+
+# IDE / 系统文件
+*.user
+*.suo
+.vs/
+Thumbs.db
+
+# 测试输出
+tests/BridgeHarness/out.txt

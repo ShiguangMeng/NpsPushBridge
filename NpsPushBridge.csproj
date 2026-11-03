@@ -1,0 +1,165 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 必须与主程序 NotchPeninsula.csproj 完全一致，否则插件无法被加载 -->
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+
+    <!-- 液态玻璃的逐像素着色（src/LiquidGlass.cs）与放大镜抓屏（src/MagCapture.cs）
+         都走指针直接读写位图 —— 这是从宿主搬过来的写法，托管数组在 45 万像素的内层循环里
+         会多出边界检查与多次寻址，实测慢一倍以上。 -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- 复制日志要用 System.Windows.Forms.Clipboard；宿主本身已启用 WinForms，运行时不会多出任何文件 -->
+    <UseWindowsForms>true</UseWindowsForms>
+
+    <!-- 插件是类库，产物为 dll -->
+    <OutputType>Library</OutputType>
+    <AssemblyName>NpsPushBridge</AssemblyName>
+    <RootNamespace>NpsPushBridge</RootNamespace>
+    <!-- ★ 版本号唯一真源：改这里一处即可。
+         它会编译进 AssemblyInformationalVersion，插件运行时（INotchPlugin.Version、界面标题、
+         日志、自动更新的本地版本）读的都是同一个值，不会再出现「代码里写死一个版本号忘了同步」。
+
+         ⚠️ 版本号与发布流程（用户 2026-09-19 明确要求）：
+           · **beta 阶段**（本地开发、未发布）版本号固定不动，**与市场当前已发布版本保持一致**
+             —— 这样插件自身的更新检查不会出现「本地比市场还新」的假象，
+             正式版发布后用户也能正常收到提示；
+           · 用户说「打包正式版」时，才取「局域网推送网桥」的版本号并**递增**，用该值编译。
+             ⚠️ 2026-09-27 起**不再打 zip 安装包**：交付物就是这一个 dll
+             （用户市场那边也只放 dll；升级链路从 1.5.0 起支持裸 dll 安装包）。
+             ⚠️ 2026-10-09 起**文档不在 dll 里**：配置教程与更新日志统一维护在网站仓库
+             （`ShiguangMeng-NPS-Plugins-Website/docs`，站点 https://nps-plugins.yzhdemeng.dpdns.org/），
+             配置界面的两个按钮直接打开对应网页 ⇒ **改文档不需要重编译**。
+             历史：1.1.1（beta 基线）→ **1.2.0（2026-09-20 发布：多行 JSON 容错 + 状态灯语义修复）**
+             → **1.3.0（2026-09-22 发布：配置教程改为「写 Markdown → 编译 HTML → 浏览器打开」，
+               移除窗口内分屏教程界面）**
+             → **1.4.0（2026-09-23 发布：配置窗口可移动/可缩放/按需置顶（插件自建窗口）、
+               白名单/端口/图标映射改为真输入框（光标/选区/复制粘贴/方向键）、
+               界面字体统一跟随宿主、右键状态灯改为配置摘要卡片）**
+             → **1.4.5（2026-09-25 发布：配置界面改为 WinUI 3 风格（新配色/圆角/控件样式/悬停渐变动画）、
+               标题栏「更新日志」按钮（窗口内分屏查看、可上下滚动）、
+               静默升级时一并释放配置教程与更新日志、插件中心显示作者名）**
+             → **1.5.0（2026-09-27 发布：配置教程与更新日志**内嵌进 dll** ⇒ **单文件分发**
+               （不再需要把两个附加文件放进插件目录，也不再发 zip 安装包）、
+               「面板显示时长」滑块改为真正生效的详情页自动收起延迟
+               （此前那个滑块无效 —— 宿主不读提醒时长）+ 新增「忽略外部鼠标操作」开关、
+               静默升级支持裸 dll 安装包）**
+             → **1.6.0（2026-10-09 发布：配置教程 / 更新日志按钮改为打开**官网**
+               （https://nps-plugins.yzhdemeng.dpdns.org/，文档随之迁到网站仓库）——
+               内嵌文档、内置更新日志页、本地教程导出链路与出图脚本**一并退役**；
+               配置界面新增「本机地址」一行（显示能上网的网卡 IP + 一键复制 `IP:端口`），
+               方便手机端填写；适配宿主 2.0.0）。** -->
+    <Version>1.7.0</Version>
+
+    <!-- ★ 作者元数据（新版插件契约的「作者」来源之一）★
+         新版宿主给 INotchPlugin 增加了 Author 成员，并规定「不写 / 为空时回退读程序集的
+         Company / Authors 元数据」。这里把作者名**内置进程序集**，与插件类里的
+         Author 属性（src/NpsPushBridgePlugin.cs）**两处填同一个值** ——
+         这样无论宿主升级到哪一版、走哪条回退路径，插件中心显示的作者都不会变成
+         「插件标识」（com.nps.pushbridge）。
+         ⚠️ 值为中文，本 csproj 以 UTF-8 保存。 -->
+    <Authors>拾光梦</Authors>
+    <Company>拾光梦</Company>
+
+    <!-- 插件运行时不需要 pdb，便于单文件分发 -->
+    <DebugType>none</DebugType>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <!--
+    ★ 宿主源码目录（自适应）★
+    用户 2026-10-09 把 fork 目录从 NotchPeninsula-main 改名为 NotchPeninsula（与仓库同名，便于对照）。
+    这里按「**存在哪个用哪个**」自适应：优先 NotchPeninsula，回退 NotchPeninsula-main ——
+    以后你再改名 / 重新 clone 到别的目录，插件工程（引用 + 输出目录）都不用跟着改一处忘一处。
+    ⚠️ 只读取宿主的 csproj 拿接口定义，**不写入、不改动**宿主源码（硬约束）。
+  -->
+  <PropertyGroup>
+    <HostSourceDir Condition="Exists('$(MSBuildThisFileDirectory)..\NotchPeninsula\NotchPeninsula.csproj')">$(MSBuildThisFileDirectory)..\NotchPeninsula</HostSourceDir>
+    <HostSourceDir Condition="'$(HostSourceDir)' == ''">$(MSBuildThisFileDirectory)..\NotchPeninsula-main</HostSourceDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 引用主程序，只为拿到 INotchPlugin / IPluginHost / IWidget / ICustomSettingsPage 等接口定义。
+         Private="false"：不要把宿主 dll 复制进插件包 —— 运行时加载器会让这些类型统一走主程序那一份。 -->
+    <ProjectReference Include="$(HostSourceDir)\NotchPeninsula.csproj" Private="false" />
+
+    <!-- 绘制接口需要 SkiaSharp 类型；ExcludeAssets="runtime" 保证不把 SkiaSharp.dll 打进插件包（宿主已自带同版本） -->
+    <PackageReference Include="SkiaSharp" Version="2.88.8" PrivateAssets="all" ExcludeAssets="runtime" />
+
+    <!-- tests 是独立的验证工程（不属于插件运行时），不参与插件编译 -->
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Content Remove="tests\**" />
+    <EmbeddedResource Remove="tests\**" />
+
+    <!-- 插件根目录下的说明类文档（README.md、自动更新说明.md），打包时一并复制进分发包。
+         这里用通配符而不是逐个列文件名，避免 csproj 里出现非 ASCII 文件名导致编码问题。
+         ⚠️ `配置教程.md` 已迁到网站仓库（见下方「随附文档不再内嵌」），不在这里。 -->
+    <PluginDoc Include="$(MSBuildThisFileDirectory)*.md" />
+  </ItemGroup>
+
+  <!--
+    ★ 宿主官方图标资源（嵌入本 dll）★
+    这 6 张图原本在宿主源码树 data/image/ 下（csproj 里是 Content + CopyToOutputDirectory 的**散文件**）。
+    宿主用它做两件事：
+      · ToastIconProvider 的「内置别名」—— 收到纯别名（qq / wintoast / bilibili …）时去
+        <宿主目录>/data/image/ 读对应文件；
+      · Renderer / MediaLogoProvider 直接读 data/image/qq-icon.png、wintoast-icon.png 等。
+    而**单文件发布版宿主不带这些散文件** → 该目录不存在 → 别名全部静默失效、宿主内置 QQ 图标也没有。
+    插件把这些图**内嵌**进来，启动时释放到宿主的 data/image/（见 HostImageSeeder.cs），
+    一次修好：别名机制、宿主内置 QQ 图标、默认 Windows 图标、媒体封面（bilibili/chrome/edge/potplayer）。
+    ⚠️ 只写宿主的 data/image/，**不改宿主动任何源码** —— 这是「不修改上游」约束下的唯一合法路径。
+    文件名必须与宿主查找的**逐字节一致**，故不能被 SDK 改名（LogicalName 钉死）。
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="assets\image\**\*"
+                      LogicalName="NpsPushBridge.assets.image.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!--
+    ★ 随附文档**不再内嵌**（2026-10-09 退役）★
+    2026-09-27 曾把 `配置教程.md` 与 `更新日志.png` 内嵌进来做「单文件分发」；
+    2026-10-09 起这两份文档统一维护在**网站仓库**
+    （`ShiguangMeng-NPS-Plugins-Website/docs/{guide,changelog}/pushbridge.md`，站点
+    <https://nps-plugins.yzhdemeng.dpdns.org/>），配置界面的两个按钮直接打开对应网页。
+
+    因此内嵌这条链路整体退役（连同内置更新日志页、本地教程导出、出图脚本一起）：
+      · 文档改动**不必再发一次插件**，也不存在「dll 里的副本过期」；
+      · dll 少带约 126 KB 的文档数据。
+
+    ⚠️ 如果将来又要离线看文档，从这里恢复内嵌是**不完整**的 ——
+       读取端（原 src/CompanionDocs.cs）与面板的内置页已经一并删除，需要一起找回。
+  -->
+
+  <!--
+    打包目标：把插件编译产物复制成一个「目录型插件」分发包 dist/NpsPushBridge/，
+    只含入口 dll + plugin.json + 说明文件，可直接整体拷进主程序的 plugins 目录。
+  -->
+  <Target Name="PackPlugin" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginDistDir>$(MSBuildThisFileDirectory)dist\NpsPushBridge\</PluginDistDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(PluginDistDir)" />
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(PluginDistDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildThisFileDirectory)plugin.json" DestinationFolder="$(PluginDistDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="@(PluginDoc)" DestinationFolder="$(PluginDistDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="[NpsPushBridge] 插件已打包到: $(PluginDistDir)" />
+  </Target>
+
+  <!--
+    开发便利目标：若主程序已经编译过，顺带把插件 dll 拷进主程序输出目录的 plugins 文件夹，
+    这样直接启动主程序就能看到插件。主程序未编译时该目标静默跳过（不阻塞插件自身的构建）。
+  -->
+  <Target Name="InstallToHostPlugins" AfterTargets="PackPlugin">
+    <PropertyGroup>
+      <HostPluginDir>$(HostSourceDir)\bin\$(Configuration)\$(TargetFramework)\plugins</HostPluginDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(HostPluginDir)" />
+    <Copy SourceFiles="$(TargetDir)$(AssemblyName).dll" DestinationFolder="$(HostPluginDir)" SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="[NpsPushBridge] 已同时安装到宿主插件目录: $(HostPluginDir)" />
+  </Target>
+
+</Project>
