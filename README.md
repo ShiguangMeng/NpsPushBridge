@@ -1,5 +1,8 @@
 # NpsPushBridge —— 局域网推送网桥插件
 
+> [!IMPORTANT]
+> 本版本已经是最后一个版本，已归档；目前已合并至NPS插件市场中的[消息同步推送MessagePush](https://nps.georgewu.top/download.php?id=message-sync-push)中。
+
 把「局域网里的任何设备」和「NotchPeninsula 灵动岛」连起来的一个 NPS 插件。
 
 手机（或平板 / 另一台电脑 / 树莓派）只要往本机发一个 HTTP 请求，内容就会立刻出现在灵动岛顶部的通知里。
